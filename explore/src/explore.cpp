@@ -126,8 +126,9 @@ Explore::Explore()
   exploring_timer_ = this->create_wall_timer(
       std::chrono::milliseconds((uint16_t)(1000.0 / planner_frequency_)),
       [this]() { makePlan(); });
-  // Start exploration right away
-  makePlan();
+  exploring_timer_->cancel();
+  // // Start exploration right away
+  // makePlan();
 }
 
 Explore::~Explore()
