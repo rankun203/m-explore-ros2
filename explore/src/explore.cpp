@@ -487,7 +487,8 @@ void Explore::stop(bool finished_exploring)
 void Explore::pause()
 {
   RCLCPP_INFO(logger_, "Exploration paused temporarily.");
-  // Only pause the timer, don't cancel goals
+  // Cancel current navigation goals and pause the timer
+  move_base_client_->async_cancel_all_goals();
   exploring_timer_->cancel();
   
   // Publish pause event
