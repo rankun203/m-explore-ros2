@@ -40,6 +40,7 @@
 
 #include <thread>
 #include <iomanip>
+#include <cmath>
 
 inline static bool same_point(const geometry_msgs::msg::Point& one,
                               const geometry_msgs::msg::Point& two)
@@ -101,10 +102,15 @@ Explore::Explore()
   // Publisher for exploration status events
   status_publisher_ = this->create_publisher<std_msgs::msg::String>("explore/status", 10);
 
-  // Subscription to resume or stop exploration
+  // True/False: resume/stop
   resume_subscription_ = this->create_subscription<std_msgs::msg::Bool>(
       "explore/resume", 10,
       std::bind(&Explore::resumeCallback, this, std::placeholders::_1));
+      
+  // True/False: pause/continue exploration (for rotation)
+  pause_subscription_ = this->create_subscription<std_msgs::msg::Bool>(
+      "explore/pause", 10,
+      std::bind(&Explore::pauseCallback, this, std::placeholders::_1));
 
   RCLCPP_INFO(logger_, "Waiting to connect to move_base nav2 server");
   move_base_client_->wait_for_action_server();
@@ -146,6 +152,15 @@ void Explore::resumeCallback(const std_msgs::msg::Bool::SharedPtr msg)
     resume();
   } else {
     stop();
+  }
+}
+
+void Explore::pauseCallback(const std_msgs::msg::Bool::SharedPtr msg)
+{
+  if (msg->data) {
+    pause();
+  } else {
+    continue_exploration();
   }
 }
 
@@ -467,6 +482,30 @@ void Explore::stop(bool finished_exploring)
   if (return_to_init_ && finished_exploring) {
     returnToInitialPose();
   }
+}
+
+void Explore::pause()
+{
+  RCLCPP_INFO(logger_, "Exploration paused temporarily.");
+  // Only pause the timer, don't cancel goals
+  exploring_timer_->cancel();
+  
+  // Publish pause event
+  publishStatusEvent("exploration_paused");
+}
+
+void Explore::continue_exploration()
+{
+  RCLCPP_INFO(logger_, "Exploration continuing after pause.");
+  
+  // Update the last_progress_ timestamp to prevent timeout after a pause
+  last_progress_ = this->now();
+  
+  // Reactivate the timer
+  exploring_timer_->reset();
+  
+  // Publish continue event
+  publishStatusEvent("exploration_continued");
 }
 
 void Explore::resume()
