@@ -39,6 +39,7 @@
 #include <explore/explore.h>
 
 #include <thread>
+#include <iomanip>
 
 inline static bool same_point(const geometry_msgs::msg::Point& one,
                               const geometry_msgs::msg::Point& two)
@@ -96,6 +97,9 @@ Explore::Explore()
                                                                      "s",
                                                                      10);
   }
+
+  // Publisher for exploration status events
+  status_publisher_ = this->create_publisher<std_msgs::msg::String>("explore/status", 10);
 
   // Subscription to resume or stop exploration
   resume_subscription_ = this->create_subscription<std_msgs::msg::Bool>(
@@ -248,6 +252,12 @@ void Explore::makePlan()
     RCLCPP_DEBUG(logger_, "frontier %zd cost: %f", i, frontiers[i].cost);
   }
 
+  // Publish frontiers found events for each frontier
+  for (size_t i = 0; i < frontiers.size(); ++i) {
+    std::string frontier_id = generateFrontierId(frontiers[i].centroid);
+    publishStatusEvent("frontiers_found:" + frontier_id);
+  }
+
   if (frontiers.empty()) {
     RCLCPP_WARN(logger_, "No frontiers found, stopping.");
     stop(true);
@@ -301,6 +311,10 @@ void Explore::makePlan()
   }
 
   RCLCPP_DEBUG(logger_, "Sending goal to move base nav2");
+  
+  // Publish intermediate event - new frontier goal with ID
+  std::string frontier_id = generateFrontierId(target_position);
+  publishStatusEvent("new_frontier_goal:" + frontier_id);
 
   // send goal to move_base if we have something new to pursue
   auto goal = nav2_msgs::action::NavigateToPose::Goal();
@@ -326,6 +340,10 @@ void Explore::makePlan()
 void Explore::returnToInitialPose()
 {
   RCLCPP_INFO(logger_, "Returning to initial pose.");
+  
+  // Publish returning to initial pose event
+  publishStatusEvent("returning_to_initial_pose");
+  
   auto goal = nav2_msgs::action::NavigateToPose::Goal();
   goal.pose.pose.position = initial_pose_.position;
   goal.pose.pose.orientation = initial_pose_.orientation;
@@ -335,6 +353,40 @@ void Explore::returnToInitialPose()
   auto send_goal_options =
       rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SendGoalOptions();
   move_base_client_->async_send_goal(goal, send_goal_options);
+}
+
+std::string Explore::generateFrontierId(const geometry_msgs::msg::Point& centroid)
+{
+  // Create a unique ID for the frontier based on its centroid coordinates
+  // Format: x_y (rounded to 2 decimal places)
+  std::stringstream frontier_id;
+  frontier_id << std::fixed << std::setprecision(2) 
+              << centroid.x << "_" 
+              << centroid.y;
+  
+  return frontier_id.str();
+}
+
+/**
+ * @brief Publish a status event message
+ * 
+ * Possible status event values:
+ * - "exploration_started": Published when exploration starts
+ * - "exploration_completed": Published when exploration completes successfully
+ * - "exploration_stopped": Published when exploration is stopped manually
+ * - "exploration_resumed": Published when exploration is resumed
+ * - "frontiers_found:<goal_id>": Published for each frontier found, includes goal ID based on centroid coordinates
+ * - "new_frontier_goal:<goal_id>": Published when a new frontier goal is set, includes goal ID
+ * - "goal_reached:<goal_id>": Published when a goal is reached successfully, includes goal ID
+ * - "goal_aborted:<goal_id>": Published when a goal is aborted, includes goal ID
+ * - "goal_canceled:<goal_id>": Published when a goal is canceled, includes goal ID
+ * - "returning_to_initial_pose": Published when returning to initial pose
+ */
+ void Explore::publishStatusEvent(const std::string& status_event)
+{
+  auto msg = std_msgs::msg::String();
+  msg.data = status_event;
+  status_publisher_->publish(msg);
 }
 
 bool Explore::goalOnBlacklist(const geometry_msgs::msg::Point& goal)
@@ -360,16 +412,22 @@ void Explore::reachedGoal(const NavigationGoalHandle::WrappedResult& result,
   switch (result.code) {
     case rclcpp_action::ResultCode::SUCCEEDED:
       RCLCPP_DEBUG(logger_, "Goal was successful");
+      // Publish goal reached event with ID
+      publishStatusEvent("goal_reached:" + generateFrontierId(frontier_goal));
       break;
     case rclcpp_action::ResultCode::ABORTED:
       RCLCPP_DEBUG(logger_, "Goal was aborted");
       frontier_blacklist_.push_back(frontier_goal);
       RCLCPP_DEBUG(logger_, "Adding current goal to black list");
+      // Publish goal aborted event with ID
+      publishStatusEvent("goal_aborted:" + generateFrontierId(frontier_goal));
       // If it was aborted probably because we've found another frontier goal,
       // so just return and don't make plan again
       return;
     case rclcpp_action::ResultCode::CANCELED:
       RCLCPP_DEBUG(logger_, "Goal was canceled");
+      // Publish goal canceled event with ID
+      publishStatusEvent("goal_canceled:" + generateFrontierId(frontier_goal));
       // If goal canceled might be because exploration stopped from topic. Don't make new plan.
       return;
     default:
@@ -392,6 +450,9 @@ void Explore::reachedGoal(const NavigationGoalHandle::WrappedResult& result,
 void Explore::start()
 {
   RCLCPP_INFO(logger_, "Exploration started.");
+  
+  // Publish start event
+  publishStatusEvent("exploration_started");
 }
 
 void Explore::stop(bool finished_exploring)
@@ -399,6 +460,9 @@ void Explore::stop(bool finished_exploring)
   RCLCPP_INFO(logger_, "Exploration stopped.");
   move_base_client_->async_cancel_all_goals();
   exploring_timer_->cancel();
+
+  // Publish end event
+  publishStatusEvent(finished_exploring ? "exploration_completed" : "exploration_stopped");
 
   if (return_to_init_ && finished_exploring) {
     returnToInitialPose();
@@ -409,6 +473,10 @@ void Explore::resume()
 {
   resuming_ = true;
   RCLCPP_INFO(logger_, "Exploration resuming.");
+  
+  // Publish resume event
+  publishStatusEvent("exploration_resumed");
+  
   // Reactivate the timer
   exploring_timer_->reset();
   // Resume immediately

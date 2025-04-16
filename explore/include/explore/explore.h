@@ -51,6 +51,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <string>
 #include <vector>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -99,6 +100,21 @@ private:
       const std::vector<frontier_exploration::Frontier>& frontiers);
 
   bool goalOnBlacklist(const geometry_msgs::msg::Point& goal);
+  
+  /**
+   * @brief Generate a unique ID for a frontier based on its centroid coordinates
+   * 
+   * @param centroid The centroid point of the frontier
+   * @return std::string The generated ID
+   */
+  std::string generateFrontierId(const geometry_msgs::msg::Point& centroid);
+  
+  /**
+   * @brief Publish a status event message
+   * 
+   * @param status_event The status event string to publish
+   */
+  void publishStatusEvent(const std::string& status_event);
 
   NavigationGoalHandle::SharedPtr navigation_goal_handle_;
   // void
@@ -109,6 +125,7 @@ private:
 
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr
       marker_array_publisher_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
   rclcpp::Logger logger_ = rclcpp::get_logger("ExploreNode");
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
@@ -140,6 +157,7 @@ private:
   bool return_to_init_;
   std::string robot_base_frame_;
   bool resuming_ = false;
+  int goal_number_ = 0;  // Track the goal number for event reporting
 };
 }  // namespace explore
 
