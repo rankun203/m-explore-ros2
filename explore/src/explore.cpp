@@ -287,7 +287,12 @@ void Explore::makePlan()
   auto frontier =
       std::find_if_not(frontiers.begin(), frontiers.end(),
                        [this](const frontier_exploration::Frontier& f) {
-                         return goalOnBlacklist(f.centroid);
+                         bool blacklisted = goalOnBlacklist(f.centroid);
+                         if (blacklisted) {
+                           RCLCPP_INFO(logger_, "Frontier at (%.2f, %.2f) is blacklisted, skipping", 
+                                      f.centroid.x, f.centroid.y);
+                         }
+                         return blacklisted;
                        });
   if (frontier == frontiers.end()) {
     RCLCPP_WARN(logger_, "All frontiers traversed/tried out, stopping.");
@@ -309,7 +314,8 @@ void Explore::makePlan()
   if ((this->now() - last_progress_ >
       tf2::durationFromSec(progress_timeout_)) && !resuming_) {
     frontier_blacklist_.push_back(target_position);
-    RCLCPP_DEBUG(logger_, "Adding current goal to black list");
+    RCLCPP_INFO(logger_, "No progress made for %.1f seconds, blacklisting frontier at (%.2f, %.2f)", 
+               progress_timeout_, target_position.x, target_position.y);
     makePlan();
     return;
   }
@@ -423,29 +429,36 @@ bool Explore::goalOnBlacklist(const geometry_msgs::msg::Point& goal)
 void Explore::reachedGoal(const NavigationGoalHandle::WrappedResult& result,
                           const geometry_msgs::msg::Point& frontier_goal)
 {
+  std::string frontier_id = generateFrontierId(frontier_goal);
+  
   switch (result.code) {
     case rclcpp_action::ResultCode::SUCCEEDED:
-      RCLCPP_DEBUG(logger_, "Goal was successful");
+      RCLCPP_INFO(logger_, "Goal at (%.2f, %.2f) was successful", 
+                 frontier_goal.x, frontier_goal.y);
       // Publish goal reached event with ID
-      publishStatusEvent("goal_reached:" + generateFrontierId(frontier_goal));
+      publishStatusEvent("goal_reached:" + frontier_id);
       break;
     case rclcpp_action::ResultCode::ABORTED:
-      RCLCPP_DEBUG(logger_, "Goal was aborted");
+      RCLCPP_INFO(logger_, "Goal at (%.2f, %.2f) was aborted", 
+                 frontier_goal.x, frontier_goal.y);
       frontier_blacklist_.push_back(frontier_goal);
-      RCLCPP_DEBUG(logger_, "Adding current goal to black list");
+      RCLCPP_INFO(logger_, "Adding frontier at (%.2f, %.2f) to blacklist due to navigation abort", 
+                 frontier_goal.x, frontier_goal.y);
       // Publish goal aborted event with ID
-      publishStatusEvent("goal_aborted:" + generateFrontierId(frontier_goal));
+      publishStatusEvent("goal_aborted:" + frontier_id);
       // If it was aborted probably because we've found another frontier goal,
       // so just return and don't make plan again
       return;
     case rclcpp_action::ResultCode::CANCELED:
-      RCLCPP_DEBUG(logger_, "Goal was canceled");
+      RCLCPP_INFO(logger_, "Goal at (%.2f, %.2f) was canceled", 
+                 frontier_goal.x, frontier_goal.y);
       // Publish goal canceled event with ID
-      publishStatusEvent("goal_canceled:" + generateFrontierId(frontier_goal));
+      publishStatusEvent("goal_canceled:" + frontier_id);
       // If goal canceled might be because exploration stopped from topic. Don't make new plan.
       return;
     default:
-      RCLCPP_WARN(logger_, "Unknown result code from move base nav2");
+      RCLCPP_WARN(logger_, "Unknown result code from move base nav2 for goal at (%.2f, %.2f)", 
+                 frontier_goal.x, frontier_goal.y);
       break;
   }
   // find new goal immediately regardless of planning frequency.
