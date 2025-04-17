@@ -262,13 +262,12 @@ void Explore::makePlan()
   auto pose = costmap_client_.getRobotPose();
   // get frontiers sorted according to cost
   auto frontiers = search_.searchFrom(pose.position);
-  RCLCPP_DEBUG(logger_, "found %lu frontiers", frontiers.size());
-  for (size_t i = 0; i < frontiers.size(); ++i) {
-    RCLCPP_DEBUG(logger_, "frontier %zd cost: %f", i, frontiers[i].cost);
-  }
+  RCLCPP_INFO(logger_, "found %lu frontiers", frontiers.size());
 
-  // Publish frontiers found events for each frontier
   for (size_t i = 0; i < frontiers.size(); ++i) {
+    RCLCPP_INFO(logger_, "frontier %zd cost: %f", i, frontiers[i].cost);
+
+    // publish frontiers found events for each frontier
     std::string frontier_id = generateFrontierId(frontiers[i].centroid);
     publishStatusEvent("frontiers_found:" + frontier_id);
   }
@@ -502,11 +501,23 @@ void Explore::continue_exploration()
   // Update the last_progress_ timestamp to prevent timeout after a pause
   last_progress_ = this->now();
   
+  // Reset previous goal to force sending a new navigation goal
+  // This prevents getting stuck in a loop of finding the same frontiers
+  // without making a decision to move after rotation
+  prev_goal_ = geometry_msgs::msg::Point();
+  
+  // Set resuming flag to true to ensure the next call to makePlan()
+  // doesn't blacklist the goal due to lack of progress
+  resuming_ = true;
+  
   // Reactivate the timer
   exploring_timer_->reset();
   
   // Publish continue event
   publishStatusEvent("exploration_continued");
+  
+  // Resume immediately
+  makePlan();
 }
 
 void Explore::resume()
