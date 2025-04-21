@@ -89,8 +89,8 @@ FrontierSearch::searchFrom(geometry_msgs::msg::Point position)
         }
       } else {
         RCLCPP_INFO(rclcpp::get_logger("FrontierSearch"), 
-          "Cell %d not suitable: visited=%d, is_frontier=%d, map_value=%d", 
-          nbr, visited_flag[nbr], frontier_flag[nbr], map_[nbr]);
+          "Cell %d not suitable: visited=%s, is_frontier=%s, map_value=%d", 
+          nbr, visited_flag[nbr] ? "true" : "false", frontier_flag[nbr] ? "true" : "false", map_[nbr]);
       }
     }
   }
