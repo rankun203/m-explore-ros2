@@ -441,9 +441,10 @@ void Explore::reachedGoal(const NavigationGoalHandle::WrappedResult& result,
     case rclcpp_action::ResultCode::ABORTED:
       RCLCPP_INFO(logger_, "Goal at (%.2f, %.2f) was aborted", 
                  frontier_goal.x, frontier_goal.y);
-      frontier_blacklist_.push_back(frontier_goal);
-      RCLCPP_INFO(logger_, "Adding frontier at (%.2f, %.2f) to blacklist due to navigation abort", 
-                 frontier_goal.x, frontier_goal.y);
+      // it seems "Received goal preemption request" is also considered aborted, but we can't blacklist such goal
+      // frontier_blacklist_.push_back(frontier_goal);
+      // RCLCPP_INFO(logger_, "Adding frontier at (%.2f, %.2f) to blacklist due to navigation abort", 
+      //            frontier_goal.x, frontier_goal.y);
       // Publish goal aborted event with ID
       publishStatusEvent("goal_aborted:" + frontier_id);
       // If it was aborted probably because we've found another frontier goal,
