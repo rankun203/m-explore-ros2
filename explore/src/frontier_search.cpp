@@ -69,9 +69,9 @@ FrontierSearch::searchFrom(geometry_msgs::msg::Point position)
 
     // iterate over 4-connected neighbourhood
     for (unsigned nbr : nhood4(idx, *costmap_)) {
-      // add to queue all free, unvisited cells, use descending search in case
-      // initialized on non-free cell
-      if (map_[nbr] <= map_[idx] && !visited_flag[nbr]) {
+      // add to queue all traversable, unvisited cells
+      // allow traversal through cells with cost less than INSCRIBED_INFLATED_OBSTACLE
+      if (map_[nbr] < nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE && !visited_flag[nbr]) {
         visited_flag[nbr] = true;
         bfs.push(nbr);
         // check if cell is new frontier cell (unvisited, NO_INFORMATION, free
@@ -80,17 +80,12 @@ FrontierSearch::searchFrom(geometry_msgs::msg::Point position)
         RCLCPP_INFO(rclcpp::get_logger("FrontierSearch"), "Is new frontier cell %d", nbr);
         frontier_flag[nbr] = true;
         Frontier new_frontier = buildNewFrontier(nbr, pos, frontier_flag);
-        if (new_frontier.size * costmap_->getResolution() >=
-            min_frontier_size_) {
-            RCLCPP_INFO(rclcpp::get_logger("FrontierSearch"), "Confirmed new frontier, adding to list");
+        double new_frontier_size = new_frontier.size * costmap_->getResolution();
+        if (new_frontier_size >= min_frontier_size_) {
           frontier_list.push_back(new_frontier);
         } else {
-          RCLCPP_INFO(rclcpp::get_logger("FrontierSearch"), "Discarding frontier, too small");
+          RCLCPP_INFO(rclcpp::get_logger("FrontierSearch"), "Discarding frontier %d, too small (%f)", nbr, new_frontier_size);
         }
-      } else {
-        RCLCPP_INFO(rclcpp::get_logger("FrontierSearch"), 
-          "Cell %d not suitable: visited=%s, is_frontier=%s, map_value=%d", 
-          nbr, visited_flag[nbr] ? "true" : "false", frontier_flag[nbr] ? "true" : "false", map_[nbr]);
       }
     }
   }
