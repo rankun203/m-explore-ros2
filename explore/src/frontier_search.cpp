@@ -77,11 +77,15 @@ FrontierSearch::searchFrom(geometry_msgs::msg::Point position)
         // check if cell is new frontier cell (unvisited, NO_INFORMATION, free
         // neighbour)
       } else if (isNewFrontierCell(nbr, frontier_flag)) {
+        RCLCPP_DEBUG(rclcpp::get_logger("FrontierSearch"), "Is new frontier cell %d", nbr);
         frontier_flag[nbr] = true;
         Frontier new_frontier = buildNewFrontier(nbr, pos, frontier_flag);
         if (new_frontier.size * costmap_->getResolution() >=
             min_frontier_size_) {
+          RCLCPP_DEBUG(rclcpp::get_logger("FrontierSearch"), "Confirmed new frontier, adding to list");
           frontier_list.push_back(new_frontier);
+        } else {
+          RCLCPP_DEBUG(rclcpp::get_logger("FrontierSearch"), "Discarding frontier, too small");
         }
       }
     }

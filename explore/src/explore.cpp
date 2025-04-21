@@ -523,6 +523,14 @@ void Explore::continue_exploration()
   // doesn't blacklist the goal due to lack of progress
   resuming_ = true;
   
+  // Clear any potentially stale search state by recreating the frontier search object
+  // This ensures we're using the most up-to-date costmap data
+  double min_frontier_size;
+  this->get_parameter("min_frontier_size", min_frontier_size);
+  search_ = frontier_exploration::FrontierSearch(costmap_client_.getCostmap(),
+                                               potential_scale_, gain_scale_,
+                                               min_frontier_size);
+  
   // Reactivate the timer
   exploring_timer_->reset();
   
